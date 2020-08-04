@@ -41,19 +41,23 @@ class InspectModules(MaxFrame):
     def OnEnter(self, event):
         "Process specific commands with entered data for output"
         
-        self.ActivateInsptree()
+        self.myinput = self.entxl.GetValue()
+        try:
+            self.mod = importlib.import_module(self.myinput)
+        except ModuleNotFoundError:
+            self.outxl.WriteText("No such module!")
+            self.outxl.SetInsertionPoint(0)
+            self.outxl.SetFocus()
+        else:
+            self.ActivateInsptree()
         event.Skip()
         
     def ActivateInsptree(self):
         "Create the treectrl that show module info"
         
-        myinput = self.entxl.GetValue()
         self.insptree.DeleteAllItems()
-        # Create the inspected module object
-        self.mod = importlib.import_module(myinput)
-        
         # Attach mod name to the root and its documentation to its event.
-        root = self.insptree.AddRoot(myinput, data=self.mod)
+        root = self.insptree.AddRoot(self.myinput, data=self.mod)
         
         # Attach second-level hierarchy
         classesbutton = self.insptree.AppendItem(root, 'Classes')
@@ -72,10 +76,13 @@ class InspectModules(MaxFrame):
         # Attach methods to each class
         for clobj in clobjlist:
             obj = self.insptree.GetItemData(clobj)
-            methodlist = inspect.getmembers(obj, inspect.isfunction)
-            for method in methodlist:
-                name = method[1].__qualname__
-                self.insptree.AppendItem(clobj, name, data=method[1])
+            methodlist = dir(obj)
+            for item in methodlist:
+                try:
+                    mobj = getattr(obj, item)
+                except: continue
+                if isinstance(mobj, type(print)) and not mobj.__name__.startswith("_"):
+                    self.insptree.AppendItem(clobj, mobj.__qualname__, data=mobj)
         
         # Attach functions to Functions
         funclist = inspect.getmembers(self.mod, inspect.isfunction)

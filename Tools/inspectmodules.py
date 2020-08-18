@@ -62,6 +62,7 @@ class InspectModules(MaxFrame):
         # Attach second-level hierarchy
         classesbutton = self.insptree.AppendItem(root, 'Classes')
         funcsbutton = self.insptree.AppendItem(root, "Functions")
+        self.varbutton = self.insptree.AppendItem(root, "Variables")
         modulesbutton = self.insptree.AppendItem(root, "Modules")
             
         # Attach classes to Classes
@@ -78,18 +79,30 @@ class InspectModules(MaxFrame):
             obj = self.insptree.GetItemData(clobj)
             methodlist = dir(obj)
             for item in methodlist:
-                try:
-                    mobj = getattr(obj, item)
-                except: continue
-                if isinstance(mobj, type(print)) and not mobj.__name__.startswith("_"):
-                    self.insptree.AppendItem(clobj, mobj.__qualname__, data=mobj)
-        
+                if not item.startswith("_"):
+                    try:
+                        mobj = getattr(obj, item)
+                    except: continue
+                    try:
+                        if not mobj.__qualname__.startswith("dep"):
+                            self.insptree.AppendItem(clobj, mobj.__name__, data=mobj)
+                    except:
+                        self.insptree.AppendItem(clobj, item, data=mobj)
+                
         # Attach functions to Functions
         funclist = inspect.getmembers(self.mod, inspect.isfunction)
         for (name, value) in funclist:
-            self.insptree.AppendItem(funcsbutton, 
-                                     value.__qualname__, 
-                                     data=value)
+            if not value.__qualname__.startswith("dep"):
+                self.insptree.AppendItem(funcsbutton, 
+                                         value.__name__, 
+                                         data=value)
+        
+        wholist = self.mod.__dict__
+        for name, obj in wholist.items():
+            if not inspect.isclass(obj) and not inspect.isfunction(obj) \
+            and not inspect.ismodule(obj) and not inspect.isbuiltin(obj) \
+            and not name.startswith("_"):
+                self.insptree.AppendItem(self.varbutton, name, data=obj)
         
         self.insptree.SetFocus()
         
@@ -98,19 +111,24 @@ class InspectModules(MaxFrame):
         if event.GetKeyCode() == wx.WXK_SPACE:
             item = self.insptree.GetFocusedItem()
             object = self.insptree.GetItemData(item)
-            if object:
-                data = inspect.getdoc(object)
-                if data is None:
-                    data = 'No documentations here.'
-            elif self.insptree.GetItemText(item) == 'Modules':
+            data = ""
+            if self.insptree.GetItemText(item) == 'Modules':
                 data = inspect.getmembers(self.mod, inspect.ismodule)
-                data = pprint.pformat(data)
+            elif self.insptree.GetItemParent(item) == self.varbutton:
+                data = object
+            elif object:
+                try:
+                    data = inspect.getdoc(object)
+                except:
+                    data = 'No documentations here.'
             self.outxl.Clear()
-            self.outxl.write(data)
+            try:
+                self.outxl.WriteText(data)
+            except: self.outxl.WriteText(pprint.pformat(data))
             self.outxl.SetInsertionPoint(0)
             self.outxl.SetFocus()
         event.Skip()
         
-app = wx.App()
+app = wx.App(redirect=True)
 InspectModules().Show()
 app.MainLoop()

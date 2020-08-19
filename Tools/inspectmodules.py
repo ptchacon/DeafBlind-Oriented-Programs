@@ -67,15 +67,15 @@ class InspectModules(MaxFrame):
             
         # Attach classes to Classes
         classlist = inspect.getmembers(self.mod, inspect.isclass)
-        clobjlist = []
+        clobjlist = {}
         for (name, value) in classlist:
             clobj = self.insptree.AppendItem(classesbutton, 
                                              name, 
                                              data=value)
-            clobjlist.append(clobj)
+            clobjlist[name] = clobj
         
         # Attach methods to each class
-        for clobj in clobjlist:
+        for name, clobj in clobjlist.items():
             obj = self.insptree.GetItemData(clobj)
             methodlist = dir(obj)
             for item in methodlist:

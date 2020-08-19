@@ -2,7 +2,7 @@
 This launches other Python programs in one button-push.
 """
 
-import os, sys
+import os, sys, subprocess
 import wx
 
 from Components.frames import MaxFrame
@@ -18,7 +18,8 @@ class LaunchFrame(MaxFrame):
         
         panel = wx.Panel(self)
         
-        self.buttons = {'Inspecting Python Modules': 'inspectmodules.py'}
+        self.buttons = {'Inspecting Python Modules': 'inspectmodules.py',
+                        "Books DB Editor": "booksdbeditor.py"}
         
         buttonslist = []
         for name in self.buttons:
@@ -37,7 +38,7 @@ class LaunchFrame(MaxFrame):
         
         button = event.GetEventObject()
         filepath = self.buttons[button.GetLabel()]
-        os.system(f'{sys.executable} {filepath}')
+        subprocess.Popen([sys.executable, filepath], creationflags=subprocess.DETACHED_PROCESS)
         
         event.Skip()
         

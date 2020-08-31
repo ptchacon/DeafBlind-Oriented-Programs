@@ -18,8 +18,12 @@ from sqlalchemy.orm import sessionmaker
 
 # Import from my library
 from Components.sizers import VBoxSizer
-from Components.dialogs import AddRowtoBookDBDialog, EditBookRowDialog
-from Components.dbtablemodels import BookTable, OlvBookTable
+from Components.dialogs import (AddRowtoBookDBDialog, EditBookRowDialog,
+                                AddRowtoSeriesDBDialog, EditSeriesRowDialog)
+from Components.dbtablemodels import (BookTable, OlvBookTable,
+                                      SeriesTable, OlvSeriesTable,
+                                      Base)
+from Components import sqlafuns
 
 class BooksDBPanel(wx.Panel):
     """
@@ -33,21 +37,18 @@ class BooksDBPanel(wx.Panel):
             self.CreateDB("books.db")
         else:
             self.engine = create_engine("sqlite:///books.db")
-        Session = sessionmaker(bind=self.engine)
-        self.session = Session()
-        metadata = MetaData(bind=self.engine)
-        metadata.reflect(bind=self.engine)
-        tables = metadata.tables
+        self.session = sqlafuns.getsqlsess(self.engine)
         
         super().__init__(parent)
         vsizer = VBoxSizer()
         
         hsizer1 = wx.BoxSizer()
         combolab = wx.StaticText(self, label="Pick a table:")
-        self.tablenames = list(tables.keys())
+        self.tablenames = [BookTable.__tablename__, SeriesTable.__tablename__]
         self.tablecombo = wx.Choice(self, choices=self.tablenames)
         self.tablecombo.SetSelection(0)
         self.tablecombo.Bind(wx.EVT_CHOICE, self.OnChoice)
+        self.current_table = self.tablecombo.GetStringSelection()
         hsizer1.Add(combolab)
         hsizer1.Add(self.tablecombo)
         vsizer.Add(hsizer1, 0, wx.CENTER)
@@ -69,74 +70,81 @@ class BooksDBPanel(wx.Panel):
         
         self.SetSizer(vsizer)
         
-        self.AddCols()
+        self.AddCols("book")
         
     def CreateDB(self, dbfilename):
         
         self.engine = create_engine(f"sqlite:///{dbfilename}")
-        metadata = BookTable.metadata
-        metadata.create_all(bind=self.engine)
+        Base.metadata.create_all(self.engine)
         
-    def AddCols(self):
+    def AddCols(self, current_table):
         
-        current_table = self.tablecombo.GetStringSelection()
-        metadata = MetaData()
-        metadata.reflect(bind=self.engine)
-        tableobject = metadata.tables[current_table]
-        for col in tableobject.columns:
-            if col.name == "book_id": continue
-            if col.name == "copyright_year":
-                self.olvtable.AddColumnDefn(ColumnDefn("Copyright Year", width=100, valueGetter="copyright_year"))
-                continue
-            self.olvtable.AddColumnDefn(ColumnDefn(col.name.title(), width=100, valueGetter=col.name))
-        self.olvtable.RepopulateList()
-        self.ShowAll()
+        self.olvtable.ClearAll()
+        if current_table == "book":
+            self.olvtable.SetColumns([ColumnDefn("Book Id", "left", 50, "book_id"),
+                                      ColumnDefn("Title", "left", 200, "title"),
+                                      ColumnDefn("Author", "left", 200, "author"),
+                                      ColumnDefn("Copyright Year", 'left', 200, "copyright_year"),
+                                      ColumnDefn("Series", "left", 200, "seriesname")])
+        elif current_table == "series":
+            self.olvtable.SetColumns([ColumnDefn("Series Id", "left", 50, "series_id"),
+                                      ColumnDefn("Series Name", "left", 200, "seriesname"),
+                                      ColumnDefn("Books Total", "left", 200, "bookstotal")])
+        self.ShowAll(current_table)
     
-    def ShowAll(self):
+    def ShowAll(self, current_table):
     
         self.olvtable.DeleteAllItems()
-        current_table = self.tablecombo.GetStringSelection()
-        metadata = MetaData()
-        metadata.reflect(bind=self.engine)
-        tableobject = metadata.tables[current_table]
-        tablecontents = self.session.query(tableobject).all()
-        for row in tablecontents:
-            rowinstance = OlvBookTable(book_id=row[0],
-                                       title=row[1],
-                                       author=row[2],
-                                       copyright_year=row[3],
-                                       series=row[4])
-            self.olvtable.AddObject(rowinstance)
-    
+        if current_table == "book":
+            result = self.session.query(BookTable.book_id, BookTable.title, BookTable.author, BookTable.copyright_year, SeriesTable.seriesname).join(SeriesTable)
+            for row in result:
+                rowinstance = OlvBookTable(row.book_id, row.title, row.author, row.copyright_year, row.seriesname)
+                self.olvtable.AddObject(rowinstance)
+        elif current_table == "series":
+            result = self.session.query(SeriesTable)
+            for row in result:
+                rowinstance = OlvSeriesTable(row.series_id, row.seriesname, row.bookstotal)
+                self.olvtable.AddObject(rowinstance)
+        
     def OnChoice(self, event):
         
-        self.ShowAll()
+        self.current_table = self.tablecombo.GetStringSelection()
+        self.AddCols(self.current_table)
         event.Skip()
     
     def OnAdd(self, event):
         
-        AddRowtoBookDBDialog(self).ShowModal()
-        self.ShowAll()
+        if self.current_table == "book":
+            AddRowtoBookDBDialog(self).ShowModal()
+        elif self.current_table == "series":
+            AddRowtoSeriesDBDialog(self).ShowModal()
+        self.ShowAll(self.current_table)
         event.Skip()
         
     def OnEdit(self, event):
     
         rowobj = self.olvtable.GetSelectedObject()
-        EditBookRowDialog(self, rowobj=rowobj).ShowModal()
-        self.ShowAll()
+        if self.current_table == "book":
+            EditBookRowDialog(self, rowobj=rowobj).ShowModal()
+        elif self.current_table == "series":
+            EditSeriesRowDialog(self, rowobj=rowobj).ShowModal()
+        self.ShowAll(self.current_table)
         event.Skip()
         
     def OnDelete(self, event):
     
         rowobj = self.olvtable.GetSelectedObject()
-        metadata = MetaData()
-        metadata.reflect(bind=self.engine)
-        if self.tablecomboselection == "book":
-            Session = sessionmaker(bind=self.engine)
-            session = Session()
-            target = session.query(BookTable).filter_by(book_id=rowobj.book_id).one()
-            session.delete(target)
-        self.ShowAll()
+        if self.current_table == "book":
+            target = self.session.query(BookTable).filter_by(book_id=rowobj.book_id).one()
+            self.session.delete(target)
+            self.session.commit()
+            self.session.close()
+        if self.current_table == "series":
+            target = self.session.query(SeriesTable).filter_by(book_id=rowobj.book_id).one()
+            self.session.delete(target)
+            self.session.commit()
+            self.session.close()
+        self.ShowAll(self.current_table)
         event.Skip()
 
 if __name__ == "__main__":

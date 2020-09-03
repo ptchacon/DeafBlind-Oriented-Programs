@@ -4,7 +4,7 @@ and present as much info as possible for
 Braille display users of this GUI program
 """
 
-import inspect, pprint, importlib
+import inspect, pprint, importlib, locale
 import wx
 
 from Components.frames import MaxFrame
@@ -44,7 +44,13 @@ class InspectModules(MaxFrame):
         self.myinput = self.entxl.GetValue()
         try:
             self.mod = importlib.import_module(self.myinput)
+        except ValueError: 
+            self.outxl.Clear()
+            self.outxl.WriteText("This module can not be loaded now!")
+            self.outxl.SetInsertionPoint(0)
+            self.outxl.SetFocus()
         except ModuleNotFoundError:
+            self.outxl.Clear()
             self.outxl.WriteText("No such module!")
             self.outxl.SetInsertionPoint(0)
             self.outxl.SetFocus()
@@ -65,44 +71,46 @@ class InspectModules(MaxFrame):
         self.varbutton = self.insptree.AppendItem(root, "Variables")
         modulesbutton = self.insptree.AppendItem(root, "Modules")
             
+        # Develop lists for disparate objects
+        classlist, funclist, varlist, self.modlist = [], [], [], []
+        for item in inspect.getmembers(self.mod):
+            if inspect.isclass(item[1]): classlist.append(item)
+            elif inspect.isfunction(item[1]): funclist.append(item)
+            elif inspect.isbuiltin(getattr(self.mod, item[0])): funclist.append(item)
+            elif inspect.ismodule(item[1]): self.modlist.append(item)
+            else: varlist.append(item)
+        
         # Attach classes to Classes
-        classlist = inspect.getmembers(self.mod, inspect.isclass)
         clobjlist = {}
         for (name, value) in classlist:
             clobj = self.insptree.AppendItem(classesbutton, 
                                              name, 
                                              data=value)
-            clobjlist[name] = clobj
+            clobjlist[name] = [clobj, value]
         
         # Attach methods to each class
-        for name, clobj in clobjlist.items():
-            obj = self.insptree.GetItemData(clobj)
+        for name, olist in clobjlist.items():
+            obj = olist[1]
             methodlist = dir(obj)
             for item in methodlist:
-                if not item.startswith("_"):
-                    try:
-                        mobj = getattr(obj, item)
-                    except: continue
-                    try:
-                        if not mobj.__qualname__.startswith("dep"):
-                            self.insptree.AppendItem(clobj, mobj.__name__, data=mobj)
-                    except:
-                        self.insptree.AppendItem(clobj, item, data=mobj)
+                try:
+                    mobj = getattr(obj, item)
+                except: continue
+                try:
+                    if not mobj.__qualname__.startswith("dep"):
+                        self.insptree.AppendItem(olist[0], mobj.__name__, data=mobj)
+                except:
+                    self.insptree.AppendItem(olist[0], item, data=mobj)
                 
         # Attach functions to Functions
-        funclist = inspect.getmembers(self.mod, inspect.isfunction)
         for (name, value) in funclist:
             if not value.__qualname__.startswith("dep"):
                 self.insptree.AppendItem(funcsbutton, 
                                          value.__name__, 
                                          data=value)
         
-        wholist = self.mod.__dict__
-        for name, obj in wholist.items():
-            if not inspect.isclass(obj) and not inspect.isfunction(obj) \
-            and not inspect.ismodule(obj) and not inspect.isbuiltin(obj) \
-            and not name.startswith("_"):
-                self.insptree.AppendItem(self.varbutton, name, data=obj)
+        for name, obj in varlist:
+            self.insptree.AppendItem(self.varbutton, name, data=obj)
         
         self.insptree.SetFocus()
         
@@ -113,7 +121,7 @@ class InspectModules(MaxFrame):
             object = self.insptree.GetItemData(item)
             data = ""
             if self.insptree.GetItemText(item) == 'Modules':
-                data = inspect.getmembers(self.mod, inspect.ismodule)
+                data = self.modlist
             elif self.insptree.GetItemParent(item) == self.varbutton:
                 data = object
             elif object:

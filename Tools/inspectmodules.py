@@ -75,39 +75,31 @@ class InspectModules(MaxFrame):
         classlist, funclist, varlist, self.modlist = [], [], [], []
         for item in inspect.getmembers(self.mod):
             if inspect.isclass(item[1]): classlist.append(item)
-            elif inspect.isfunction(item[1]): funclist.append(item)
-            elif inspect.isbuiltin(getattr(self.mod, item[0])): funclist.append(item)
+            elif inspect.isfunction(item[1]) or inspect.isbuiltin(getattr(self.mod, item[0])):
+                funclist.append(item)
             elif inspect.ismodule(item[1]): self.modlist.append(item)
             else: varlist.append(item)
         
         # Attach classes to Classes
-        clobjlist = {}
-        for (name, value) in classlist:
+        for (name, cobject) in classlist:
             clobj = self.insptree.AppendItem(classesbutton, 
                                              name, 
-                                             data=value)
-            clobjlist[name] = [clobj, value]
-        
-        # Attach methods to each class
-        for name, olist in clobjlist.items():
-            obj = olist[1]
-            methodlist = dir(obj)
-            for item in methodlist:
-                try:
-                    mobj = getattr(obj, item)
-                except: continue
-                try:
-                    if not mobj.__qualname__.startswith("dep"):
-                        self.insptree.AppendItem(olist[0], mobj.__name__, data=mobj)
-                except:
-                    self.insptree.AppendItem(olist[0], item, data=mobj)
+                                             data=cobject)
+            
+            # Attach methods to each class
+            cmbut = self.insptree.AppendItem(clobj, "Methods")
+            cdbut = self.insptree.AppendItem(clobj, "Data")
+            for attrd in inspect.classify_class_attrs(cobject):
+                if attrd.kind.endswith("method"):
+                    self.insptree.AppendItem(cmbut, attrd.name, data=attrd.object)
+                elif attrd.kind == "data" or attrd.kind == "property":
+                    self.insptree.AppendItem(cdbut, attrd.name, data=attrd.object)
                 
         # Attach functions to Functions
         for (name, value) in funclist:
-            if not value.__qualname__.startswith("dep"):
-                self.insptree.AppendItem(funcsbutton, 
-                                         value.__name__, 
-                                         data=value)
+            self.insptree.AppendItem(funcsbutton, 
+                                     name, 
+                                     data=value)
         
         for name, obj in varlist:
             self.insptree.AppendItem(self.varbutton, name, data=obj)
@@ -124,11 +116,18 @@ class InspectModules(MaxFrame):
                 data = self.modlist
             elif self.insptree.GetItemParent(item) == self.varbutton:
                 data = object
+            elif self.insptree.GetItemText(self.insptree.GetItemParent(item)) == "Data":
+                data = object
             elif object:
                 try:
                     data = inspect.getdoc(object)
                 except:
                     data = 'No documentations here.'
+                else:
+                    try:
+                        data = f"{data}\n\n{inspect.getfullargspec(object)}"
+                    except:
+                        data = f"{data}\n\nNo arguments info from inspect.getfullargspec available here."
             self.outxl.Clear()
             try:
                 self.outxl.WriteText(data)

@@ -19,7 +19,9 @@ class LaunchFrame(MaxFrame):
         panel = wx.Panel(self)
         
         self.buttons = {'Inspecting Python Modules': 'inspectmodules.py',
-                        "Books DB Editor": "booksdbeditor.py"}
+                        "Books DB Editor": "booksdbeditor.py",
+                        "Program Output": "programoutput.py",
+                        "IoInteraction": "iointeraction.py"}
         
         buttonslist = []
         for name in self.buttons:
